@@ -11,7 +11,7 @@ pipeline {
     environment {
         APP_NAME    = 'jenkins-demo'
         APP_VERSION = "2.0.${BUILD_NUMBER}"
-        DEPLOY_ENV  = 'staging'
+        DEPLOY_ENV = 'production'
     }
 
     triggers {
