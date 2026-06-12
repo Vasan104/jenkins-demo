@@ -1,107 +1,159 @@
 pipeline {
     agent any
 
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+        timestamps()
+        timeout(time: 10, unit: 'MINUTES')
+        disableConcurrentBuilds()
+    }
+
     environment {
-        APP_NAME = 'jenkins-demo'
-        BUILD_VERSION = "1.0.${BUILD_NUMBER}"
+        APP_NAME    = 'jenkins-demo'
+        APP_VERSION = "2.0.${BUILD_NUMBER}"
+        DEPLOY_ENV  = 'staging'
+    }
+
+    triggers {
+        githubPush()
     }
 
     stages {
 
-        stage('Pull Code') {
+        stage('Checkout') {
             steps {
-                echo "=========================================="
-                echo "STAGE 1: Pulling code from GitHub"
-                echo "=========================================="
-                echo "Repository : ${GIT_URL}"
-                echo "Branch     : ${GIT_BRANCH}"
-                echo "Commit     : ${GIT_COMMIT}"
-                echo "Workspace  : ${WORKSPACE}"
-                sh 'ls -la'
+                echo "=============================="
+                echo "Checking out source code..."
+                echo "=============================="
+                checkout scm
+                sh 'git log -1 --pretty=format:"%h - %s (%an)"'
+            }
+        }
+
+        stage('Environment Info') {
+            steps {
+                echo "=============================="
+                echo "Environment Information"
+                echo "=============================="
+                sh '''
+                    echo "App Name    : $APP_NAME"
+                    echo "App Version : $APP_VERSION"
+                    echo "Deploy Env  : $DEPLOY_ENV"
+                    echo "Build No    : $BUILD_NUMBER"
+                    echo "Node Name   : $NODE_NAME"
+                    echo "Workspace   : $WORKSPACE"
+                    echo "Java Version:"
+                    java -version
+                '''
+            }
+        }
+
+        stage('Parallel Tests') {
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        echo "Running Unit Tests..."
+                        sh '''
+                            echo "Unit Test 1: Auth Service    - PASSED"
+                            echo "Unit Test 2: User Service    - PASSED"
+                            echo "Unit Test 3: Order Service   - PASSED"
+                            echo "Unit Tests completed!"
+                        '''
+                    }
+                }
+                stage('Integration Tests') {
+                    steps {
+                        echo "Running Integration Tests..."
+                        sh '''
+                            echo "Integration Test 1: API Gateway  - PASSED"
+                            echo "Integration Test 2: DB Connection - PASSED"
+                            echo "Integration Tests completed!"
+                        '''
+                    }
+                }
+                stage('Security Scan') {
+                    steps {
+                        echo "Running Security Scan..."
+                        sh '''
+                            echo "Scanning for vulnerabilities..."
+                            echo "CVE Check: No critical issues"
+                            echo "OWASP Check: Passed"
+                            echo "Security Scan completed!"
+                        '''
+                    }
+                }
             }
         }
 
         stage('Build') {
             steps {
-                echo "=========================================="
-                echo "STAGE 2: Building the application"
-                echo "=========================================="
-                echo "App Name   : ${APP_NAME}"
-                echo "Version    : ${BUILD_VERSION}"
+                echo "=============================="
+                echo "Building Application"
+                echo "=============================="
                 sh '''
-                    echo "Simulating build process..."
-                    echo "Compiling source files..."
-                    sleep 2
-                    echo "Build complete!"
-                    echo "${BUILD_VERSION}" > build-output.txt
-                    echo "Build artifact created: build-output.txt"
+                    echo "Building ${APP_NAME} v${APP_VERSION}..."
+                    sleep 1
+                    echo "Build SUCCESS"
+                    echo "${APP_NAME}-${APP_VERSION}" > artifact.txt
+                    cat artifact.txt
                 '''
             }
         }
 
-        stage('Test') {
+        stage('Deploy to Staging') {
+            when {
+                expression { env.DEPLOY_ENV == 'staging' }
+            }
             steps {
-                echo "=========================================="
-                echo "STAGE 3: Running Tests"
-                echo "=========================================="
+                echo "=============================="
+                echo "Deploying to STAGING"
+                echo "=============================="
                 sh '''
-                    echo "Running unit tests..."
-                    echo "Test 1: Login module        - PASSED"
-                    echo "Test 2: Payment module      - PASSED"
-                    echo "Test 3: User profile module - PASSED"
-                    echo "Test 4: API endpoints       - PASSED"
-                    echo "All 4 tests passed!"
-                    echo "Test coverage: 85%"
+                    echo "Deploying ${APP_NAME} v${APP_VERSION} to staging..."
+                    echo "Deployment complete!"
                 '''
             }
         }
 
-        stage('Code Quality') {
+        stage('Deploy to Production') {
+            when {
+                expression { env.DEPLOY_ENV == 'production' }
+            }
             steps {
-                echo "=========================================="
-                echo "STAGE 4: Code Quality Check"
-                echo "=========================================="
-                sh '''
-                    echo "Running code quality analysis..."
-                    echo "Checking code style..."
-                    echo "Checking for vulnerabilities..."
-                    echo "Code quality score: 92/100"
-                    echo "No critical issues found!"
-                '''
+                echo "This stage only runs when DEPLOY_ENV=production"
+                sh 'echo "Production deployment..."'
             }
         }
 
-        stage('Archive') {
+        stage('Manual Approval') {
+            when {
+                expression { env.DEPLOY_ENV == 'staging' }
+            }
             steps {
-                echo "=========================================="
-                echo "STAGE 5: Archiving Build Artifacts"
-                echo "=========================================="
-                sh '''
-                    echo "Archiving artifacts..."
-                    ls -la
-                    echo "Build artifact: build-output.txt"
-                    cat build-output.txt
-                '''
-                archiveArtifacts artifacts: 'build-output.txt', fingerprint: true
+                input message: 'Staging looks good? Approve to finish pipeline.',
+                      ok: 'Yes, Approve!'
             }
         }
+
     }
 
     post {
+        always {
+            echo "=============================="
+            echo "Pipeline completed!"
+            echo "Build    : ${BUILD_NUMBER}"
+            echo "Status   : ${currentBuild.currentResult}"
+            echo "Duration : ${currentBuild.durationString}"
+            echo "=============================="
+        }
         success {
-            echo "=========================================="
-            echo "PIPELINE COMPLETED SUCCESSFULLY!"
-            echo "App: ${APP_NAME} v${BUILD_VERSION}"
-            echo "=========================================="
+            echo "SUCCESS: ${APP_NAME} v${APP_VERSION} pipeline passed!"
         }
         failure {
-            echo "=========================================="
-            echo "PIPELINE FAILED!"
-            echo "Check the logs above for errors."
-            echo "=========================================="
+            echo "FAILURE: Pipeline failed at ${currentBuild.currentResult}"
         }
-        always {
-            echo "Pipeline finished at: ${new Date()}"
+        unstable {
+            echo "UNSTABLE: Pipeline completed with warnings"
         }
     }
 }
