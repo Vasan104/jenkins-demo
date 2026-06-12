@@ -71,6 +71,12 @@ pipeline {
             }
         }
 
+        stage('Intentional Failure') {
+    steps {
+        sh 'exit 1'
+    }
+}
+
         stage('Archive') {
             steps {
                 echo "=========================================="
