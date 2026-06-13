@@ -63,27 +63,17 @@ pipeline {
             }
         }
 
-        stage('Unit Test') {
-            steps {
-                echo "=============================="
-                echo "Running Unit Tests"
-                echo "=============================="
-                sh 'mvn test'
-            }
-            post {
-                always {
-                    junit 'target/surefire-reports/*.xml'
-                    echo "Test reports published"
-                }
-                success {
-                    echo "All tests passed!"
-                }
-                failure {
-                    echo "Some tests failed — check test report"
-                }
-            }
+       stage('Unit Test') {
+    steps {
+        echo "Running Unit Tests..."
+        sh 'mvn test -Dsurefire.timeout=300'
+    }
+    post {
+        always {
+            junit 'target/surefire-reports/*.xml'
         }
-
+    }
+}
         stage('Package') {
             steps {
                 echo "=============================="
